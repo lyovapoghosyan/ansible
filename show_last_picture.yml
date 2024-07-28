@@ -1,0 +1,73 @@
+---
+
+- name: Setup HTTP stream frame capture and hosting
+  hosts: all
+  become: true
+  tasks:
+    - name: Set package names based on distribution
+      set_fact:
+        docker_package: "{{ 'docker.io' if ansible_facts['os_family'] == 'Debian' else 'docker' }}"
+        docker_compose_package: "docker-compose"
+        frame_capture_home: "/opt/frame_capture"
+
+    - name: Install Docker package
+      package:
+        name: "{{ docker_package }}"
+        state: present
+      when: ansible_facts['os_family'] in ['Debian', 'RedHat']
+
+    - name: Install Docker Compose package
+      package:
+        name: "{{ docker_compose_package }}"
+        state: present
+      when: ansible_facts['os_family'] in ['Debian', 'RedHat']
+
+    - name: Start and enable Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Create directories for frame storage and nginx configuration
+      file:
+        path: "{{ frame_capture_home }}/{{ item }}"
+        state: directory
+        owner: root
+        group: root
+      loop:
+        - frames
+        - nginx
+
+    - name: Pull ffmpeg Docker image
+      docker_image:
+        name: jrottenberg/ffmpeg
+        source: pull
+
+    - name: Create Docker Compose file
+      copy:
+        dest: "{{ frame_capture_home }}/docker-compose.yml"
+        content: |
+          version: '3'
+          services:
+            ffmpeg:
+              image: jrottenberg/ffmpeg:latest
+              command: >
+                -i http://webcam.mchcares.com/mjpg/video.mjpg
+                -vf fps=1 -update 1 /frames/frame.jpg
+              volumes:
+                - {{ frame_capture_home }}/frames:/frames
+              restart: always
+
+            nginx:
+              image: nginx:latest
+              volumes:
+                - {{ frame_capture_home }}/frames:/usr/share/nginx/html:ro
+              ports:
+                - "80:80"
+              restart: always
+
+    - name: Start Docker Compose services
+      command: docker-compose up -d
+      args:
+        chdir: "{{ frame_capture_home }}"
+

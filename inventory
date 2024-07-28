@@ -1,0 +1,9 @@
+[web_servers]
+#localhost 
+localhost apache_package=apache2 php_package=libapache2-mod-php
+
+[db_servers]
+#centos-host apache_package=apache2 php_package=php
+
+[file_server]
+#192.168.0.105
